@@ -1,6 +1,9 @@
 <p align="center">
-<a href="https://www.traceloop.dev/">
-<img width="300" src="https://raw.githubusercontent.com/traceloop/.github/main/img/logo.svg">
+<a href="https://www.traceloop.com/#gh-light-mode-only">
+<img width="300" src="https://raw.githubusercontent.com/traceloop/.github/main/img/traceloop-light.png">
+</a>
+<a href="https://www.traceloop.com/#gh-dark-mode-only">
+<img width="300" src="https://raw.githubusercontent.com/traceloop/.github/main/img/traceloop-dark.png">
 </a>
 </p>
 <p align="center">
