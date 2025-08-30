@@ -2,6 +2,8 @@ name: zap-nightly
 on:
   schedule: [{ cron: "0 1 * * *" }]
   workflow_dispatch:
+
+permissions: write-all
 jobs:
   load-targets:
     runs-on: ubuntu-latest

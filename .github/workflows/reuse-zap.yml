@@ -33,7 +33,6 @@ jobs:
       - name: Persist full HTML report
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.service_name }}-zap-report
+          name: zap-report-${{ inputs.service_name }}
           path: |
             report_html.html
-            zap_scan.xml
