@@ -21,6 +21,10 @@ jobs:
           echo "$output" >> $GITHUB_OUTPUT
   zap-fanout:
     needs: load-targets
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.load-targets.outputs.matrix) }}
