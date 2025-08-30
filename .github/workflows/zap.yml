@@ -27,6 +27,7 @@ jobs:
       security-events: write
       actions: read
       issues: write
+      id-token: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.load-targets.outputs.matrix) }}
