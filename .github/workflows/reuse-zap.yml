@@ -23,13 +23,6 @@ jobs:
           rules_file_name: ".zap/rules.tsv" # optional: to ignore known FP
           cmd_options: "-a" # attack mode lite
           artifact_name: zapscan${{ inputs.service_name }}
-      - name: Convert ZAP report to SARIF
-        uses: SvanBoxel/zaproxy-to-ghas@main
-      - name: Upload SARIF to code scanning
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: zap.sarif
-          category: zap-${{ inputs.service_name }}
       - name: Persist full HTML report
         uses: actions/upload-artifact@v4
         with:
