@@ -1,0 +1,38 @@
+name: reuse-zap
+on:
+  workflow_call:
+    inputs:
+      service_name: { required: true, type: string }
+      target_url: { required: true, type: string }
+      auth_type: { required: false, type: string, default: "none" }
+      secret_name: { required: false, type: string }
+jobs:
+  zap:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ZAP Baseline
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ inputs.target_url }}
+          rules_file_name: ".zap/rules.tsv" # optional: to ignore known FP
+          cmd_options: "-a" # attack mode lite
+      - name: Convert ZAP report to SARIF
+        run: |
+          pipx install zap2sarif
+          zap2sarif -i zap_scan.xml -o zap.sarif || true
+      - name: Upload SARIF to code scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: zap.sarif
+      - name: Persist full HTML report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.service_name }}-zap-report
+          path: |
+            report_html.html
+            zap_scan.xml

@@ -13,7 +13,7 @@ jobs:
         run: |
           output=$(python3 - <<'EOF'
           import yaml, json, sys
-          with open(".github/security/targets.yml") as f:
+          with open("security/targets.yml") as f:
               data = yaml.safe_load(f)
           print(f"matrix={json.dumps({'include': data['services']})}")
           EOF
