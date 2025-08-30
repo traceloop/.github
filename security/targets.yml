@@ -1,0 +1,11 @@
+services:
+  - name: api-service
+    url: "https://api-staging.traceloop.com"
+    auth:
+      type: bearer
+      secret_name: TRACELOOP_STAGING_API_KEY
+  # - name: web-app
+  #   url: "https://app-staging.traceloop.com"
+  #   auth:
+  #     type: bearer
+  #     secret_name: TRACELOOP_API_KEY
