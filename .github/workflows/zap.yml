@@ -25,6 +25,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
+      issues: write
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.load-targets.outputs.matrix) }}
