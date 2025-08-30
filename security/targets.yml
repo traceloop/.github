@@ -1,5 +1,5 @@
 services:
-  - name: api-service
+  - name: api
     url: "https://api-staging.traceloop.com"
     auth:
       type: bearer

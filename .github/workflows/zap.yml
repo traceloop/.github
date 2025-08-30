@@ -21,15 +21,12 @@ jobs:
           echo "$output" >> $GITHUB_OUTPUT
   zap-fanout:
     needs: load-targets
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.load-targets.outputs.matrix) }}
-    steps:
-      - name: Call reusable ZAP
-        uses: ./.github/workflows/reuse-zap.yml
-        with:
-          service_name: ${{ matrix.name }}
-          target_url: ${{ matrix.url }}
-          auth_type: ${{ matrix.auth.type || 'none' }}
-          secret_name: ${{ matrix.auth.secret_name || '' }}
+    uses: ./.github/workflows/reuse-zap.yml
+    with:
+      service_name: ${{ matrix.name }}
+      target_url: ${{ matrix.url }}
+      auth_type: ${{ matrix.auth.type || 'none' }}
+      secret_name: ${{ matrix.auth.secret_name || '' }}
