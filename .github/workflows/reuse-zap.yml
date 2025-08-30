@@ -13,6 +13,7 @@ jobs:
       contents: read
       security-events: write
       actions: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
       - name: Run ZAP Baseline
@@ -21,7 +22,7 @@ jobs:
           target: ${{ inputs.target_url }}
           rules_file_name: ".zap/rules.tsv" # optional: to ignore known FP
           cmd_options: "-a" # attack mode lite
-          artifact_name: zap-scan-${{ inputs.service_name }}
+          artifact_name: zapscan${{ inputs.service_name }}
       - name: Convert ZAP report to SARIF
         uses: SvanBoxel/zaproxy-to-ghas@main
       - name: Upload SARIF to code scanning
@@ -32,6 +33,6 @@ jobs:
       - name: Persist full HTML report
         uses: actions/upload-artifact@v4
         with:
-          name: zap-report-${{ inputs.service_name }}
+          name: zapreport${{ inputs.service_name }}
           path: |
             report_html.html
