@@ -6,9 +6,6 @@ on:
       target_url: { required: true, type: string }
       auth_type: { required: false, type: string, default: "none" }
       secret_name: { required: false, type: string }
-    secrets:
-      GITHUB_TOKEN:
-        required: false
 jobs:
   zap:
     runs-on: ubuntu-latest
@@ -16,7 +13,6 @@ jobs:
       contents: read
       security-events: write
       actions: read
-      issues: write
     steps:
       - uses: actions/checkout@v4
       - name: Run ZAP Baseline
@@ -25,7 +21,7 @@ jobs:
           target: ${{ inputs.target_url }}
           rules_file_name: ".zap/rules.tsv" # optional: to ignore known FP
           cmd_options: "-a" # attack mode lite
-          artifact_name: zap-scan
+          artifact_name: zap-scan-${{ inputs.service_name }}
       - name: Convert ZAP report to SARIF
         run: |
           pipx install zap2sarif
