@@ -37,3 +37,5 @@ jobs:
       target_url: ${{ matrix.url }}
       auth_type: ${{ matrix.auth.type || 'none' }}
       secret_name: ${{ matrix.auth.secret_name || '' }}
+    secrets:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

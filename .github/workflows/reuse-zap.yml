@@ -6,6 +6,9 @@ on:
       target_url: { required: true, type: string }
       auth_type: { required: false, type: string, default: "none" }
       secret_name: { required: false, type: string }
+    secrets:
+      GITHUB_TOKEN:
+        required: false
 jobs:
   zap:
     runs-on: ubuntu-latest
