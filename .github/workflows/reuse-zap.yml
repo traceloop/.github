@@ -22,6 +22,7 @@ jobs:
           target: ${{ inputs.target_url }}
           rules_file_name: ".zap/rules.tsv" # optional: to ignore known FP
           cmd_options: "-a" # attack mode lite
+          artifact_name: zap-scan
       - name: Convert ZAP report to SARIF
         run: |
           pipx install zap2sarif
