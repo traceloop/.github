@@ -1,54 +1,31 @@
-name: trivy (reusable)
-
+name: reuse-zap
 on:
   workflow_call:
     inputs:
-      docker_context:
-        type: string
-        required: false
-        default: "."
-      image_name:
-        type: string
-        required: false
-        default: "my-app"
-      severity:
-        type: string
-        required: false
-        default: "CRITICAL,HIGH"
-
-permissions:
-  contents: read
-  security-events: write
-
+      service_name: { required: true, type: string }
+      target_url: { required: true, type: string }
+      auth_type: { required: false, type: string, default: "none" }
+      secret_name: { required: false, type: string }
 jobs:
-  trivy:
+  zap:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
-
-      - name: Cache Trivy
-        uses: actions/cache@v4
+      - name: Run ZAP Baseline
+        uses: zaproxy/action-baseline@v0.12.0
         with:
-          path: ~/.cache/trivy
-          key: trivy-${{ runner.os }}-${{ github.ref_name }}
-          restore-keys: |
-            trivy-${{ runner.os }}-
-
-      - name: Build image
-        run: docker build -t ${{ inputs.image_name }}:${{ github.sha }} ${{ inputs.docker_context }}
-
-      - name: Trivy scan (SARIF)
-        uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
+          target: ${{ inputs.target_url }}
+          rules_file_name: ".zap/rules.tsv" # optional: to ignore known FP
+          cmd_options: "-a" # attack mode lite
+          artifact_name: zapscan${{ inputs.service_name }}
+      - name: Persist full HTML report
+        uses: actions/upload-artifact@v4
         with:
-          scan-type: image
-          image-ref: ${{ inputs.image_name }}:${{ github.sha }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: ${{ inputs.severity }}
-          vuln-type: os,library
-
-      - name: Upload SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-results.sarif
+          name: zapreport${{ inputs.service_name }}
+          path: |
+            report_html.html

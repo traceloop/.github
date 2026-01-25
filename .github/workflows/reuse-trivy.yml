@@ -1,12 +1,20 @@
-name: trivy
+name: trivy (reusable)
 
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
-  schedule:
-    - cron: "0 10 * * 0" # Sundays 10:00 UTC
+  workflow_call:
+    inputs:
+      docker_context:
+        type: string
+        required: false
+        default: "."
+      image_name:
+        type: string
+        required: false
+        default: "my-app"
+      severity:
+        type: string
+        required: false
+        default: "CRITICAL,HIGH"
 
 permissions:
   contents: read
@@ -14,14 +22,10 @@ permissions:
 
 jobs:
   trivy:
-    name: Trivy image scan
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # Optional but recommended: speed + fewer DB download hiccups
       - name: Cache Trivy
         uses: actions/cache@v4
         with:
@@ -30,22 +34,20 @@ jobs:
           restore-keys: |
             trivy-${{ runner.os }}-
 
-      - name: Build an image from Dockerfile (local tag)
-        run: docker build -t my-app:${{ github.sha }} .
+      - name: Build image
+        run: docker build -t ${{ inputs.image_name }}:${{ github.sha }} ${{ inputs.docker_context }}
 
-      - name: Run Trivy vulnerability scanner (SARIF)
+      - name: Trivy scan (SARIF)
         uses: aquasecurity/trivy-action@7b7aa264d83dc58691451798b4d117d53d21edfe
         with:
           scan-type: image
-          image-ref: my-app:${{ github.sha }}
-
+          image-ref: ${{ inputs.image_name }}:${{ github.sha }}
           format: sarif
           output: trivy-results.sarif
-
-          severity: CRITICAL,HIGH
+          severity: ${{ inputs.severity }}
           vuln-type: os,library
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
