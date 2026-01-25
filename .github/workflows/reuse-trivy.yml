@@ -1,4 +1,4 @@
-name: trivy (reusable)
+name: reuse-trivy
 
 on:
   workflow_call:
