@@ -72,15 +72,15 @@ jobs:
           GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          SECRET_ARGS=""
-          [ -n "${GH_ACCESS_TOKEN}" ] && SECRET_ARGS="${SECRET_ARGS} --secret id=gh_token,env=GH_ACCESS_TOKEN"
-          [ -n "${DOPPLER_TOKEN}" ] && SECRET_ARGS="${SECRET_ARGS} --secret id=doppler_token,env=DOPPLER_TOKEN"
+          secrets=()
+          [ -n "${GH_ACCESS_TOKEN}" ] && secrets+=(--secret id=gh_token,env=GH_ACCESS_TOKEN)
+          [ -n "${DOPPLER_TOKEN}" ] && secrets+=(--secret id=doppler_token,env=DOPPLER_TOKEN)
           
           docker buildx build \
             --load \
             -t "${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}" \
             -f "${{ inputs.docker_context }}/${{ inputs.dockerfile }}" \
-            ${SECRET_ARGS} \
+            "${secrets[@]}" \
             "${{ inputs.docker_context }}"
 
       - name: Trivy scan (SARIF)
