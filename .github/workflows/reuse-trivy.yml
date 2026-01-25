@@ -85,7 +85,7 @@ jobs:
             "${{ inputs.docker_context }}"
 
       - name: Trivy scan (SARIF)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main'
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
@@ -95,7 +95,7 @@ jobs:
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
       - name: Upload SARIF to GitHub Security
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results-${{ matrix.platform }}.sarif
