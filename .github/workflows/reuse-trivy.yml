@@ -45,7 +45,7 @@ jobs:
         env:
           PLATFORMS: ${{ inputs.platforms }}
         run: |
-          json=$(echo "${PLATFORMS}" | tr ',' '\n' | jq -R . | jq -s -c '{platform: .}')
+          json=$(echo "${PLATFORMS}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | jq -R . | jq -s -c '{platform: .}')
           echo "matrix=$json" >> $GITHUB_OUTPUT
 
   trivy:
