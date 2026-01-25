@@ -42,9 +42,10 @@ jobs:
     steps:
       - name: Set up matrix
         id: set-matrix
+        env:
+          PLATFORMS: ${{ inputs.platforms }}
         run: |
-          platforms="${{ inputs.platforms }}"
-          json=$(echo "$platforms" | tr ',' '\n' | jq -R . | jq -s -c '{platform: .}')
+          json=$(echo "${PLATFORMS}" | tr ',' '\n' | jq -R . | jq -s -c '{platform: .}')
           echo "matrix=$json" >> $GITHUB_OUTPUT
 
   trivy:
