@@ -89,45 +89,46 @@ jobs:
             "${secrets[@]}" \
             "${{ inputs.docker_context }}"
 
-      - name: Trivy scan (SARIF)
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      - name: Trivy scan (JSON)
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
-          format: sarif
-          output: trivy-results-${{ matrix.platform }}.sarif
+          format: json
+          output: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.json
           vuln-type: os,library
           severity: CRITICAL,HIGH,MEDIUM,LOW
+
+      - name: Convert Trivy results
+        run: |
+          set -euo pipefail
+          PREFIX="trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}"
+
+          # Convert -> table (for logs + PR comment)
+          trivy convert --format table --output "${PREFIX}.txt" "${PREFIX}.json"
+
+          # Convert -> SARIF only on main branch
+          if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            trivy convert --format sarif --output "${PREFIX}.sarif" "${PREFIX}.json"
+          fi
 
       - name: Upload SARIF to GitHub Security
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-results-${{ matrix.platform }}.sarif
+          sarif_file: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.sarif
           category: container-security-${{ inputs.image_name }}-${{ matrix.platform }}
 
-      - name: Trivy scan for PR comment
-        if: github.event_name == 'pull_request'
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          image-ref: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
-          format: table
-          output: trivy-results-${{ matrix.platform }}.txt
-          vuln-type: os,library
-          severity: CRITICAL,HIGH,MEDIUM,LOW
-
       - name: Log full Trivy results
-        if: github.event_name == 'pull_request'
         run: |
-          echo "::group::Full Trivy Scan Results (${{ matrix.platform }})"
-          cat trivy-results-${{ matrix.platform }}.txt
+          echo "::group::Full Trivy Scan Results (${{ inputs.image_name }} - ${{ matrix.platform }})"
+          cat trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt
           echo "::endgroup::"
 
       - name: Prepare PR comment
         if: github.event_name == 'pull_request'
         run: |
-          RESULTS_FILE="trivy-results-${{ matrix.platform }}.txt"
-          COMMENT_FILE="trivy-comment-${{ matrix.platform }}.md"
+          RESULTS_FILE="trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt"
+          COMMENT_FILE="trivy-comment-${{ inputs.image_name }}-${{ matrix.platform }}.md"
           MAX_CHARS=60000
 
           # Get file size
@@ -158,5 +159,5 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: trivy-scan-${{ inputs.image_name }}-${{ matrix.platform }}
-          path: trivy-comment-${{ matrix.platform }}.md
+          path: trivy-comment-${{ inputs.image_name }}-${{ matrix.platform }}.md
 
