@@ -3,6 +3,12 @@ name: reuse-trivy
 on:
   workflow_call:
     inputs:
+      # Image scanning
+      scan_image:
+        type: boolean
+        required: false
+        default: true
+        description: "Scan Docker image for vulnerabilities"
       docker_context:
         type: string
         required: false
@@ -25,6 +31,17 @@ on:
         required: false
         default: "Linux-ARM64"
         description: "Runner to use for ARM builds (default: Linux-ARM64)"
+      # Helm chart scanning
+      scan_helm_chart:
+        type: boolean
+        required: false
+        default: false
+        description: "Scan Helm chart for misconfigurations"
+      helm_chart_path:
+        type: string
+        required: false
+        default: "helm/"
+        description: "Path to Helm chart directory (e.g., 'helm/' or 'charts/myapp')"
     secrets:
       GH_ACCESS_TOKEN:
         required: false
@@ -41,6 +58,7 @@ permissions:
 
 jobs:
   setup:
+    if: inputs.scan_image
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -53,7 +71,8 @@ jobs:
           json=$(echo "${PLATFORMS}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | jq -R . | jq -s -c '{platform: .}')
           echo "matrix=$json" >> $GITHUB_OUTPUT
 
-  trivy:
+  image-scan:
+    if: inputs.scan_image
     needs: setup
     strategy:
       fail-fast: false
@@ -160,4 +179,89 @@ jobs:
         with:
           header: trivy-scan-${{ inputs.image_name }}-${{ matrix.platform }}
           path: trivy-comment-${{ inputs.image_name }}-${{ matrix.platform }}.md
+
+  helm-scan:
+    if: inputs.scan_helm_chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Trivy
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-helm-${{ runner.os }}
+          restore-keys: |
+            trivy-helm-
+
+      - name: Trivy Helm scan (JSON)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: config
+          scan-ref: ${{ inputs.helm_chart_path }}
+          format: json
+          output: trivy-helm-${{ inputs.image_name }}.json
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+
+      - name: Convert Helm results
+        run: |
+          set -euo pipefail
+          PREFIX="trivy-helm-${{ inputs.image_name }}"
+
+          # Convert -> table (for logs + PR comment)
+          trivy convert --format table --output "${PREFIX}.txt" "${PREFIX}.json"
+
+          # Convert -> SARIF only on main branch
+          if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            trivy convert --format sarif --output "${PREFIX}.sarif" "${PREFIX}.json"
+          fi
+
+      - name: Upload Helm SARIF to GitHub Security
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-helm-${{ inputs.image_name }}.sarif
+          category: helm-misconfig-${{ inputs.image_name }}
+
+      - name: Log Helm scan results
+        run: |
+          echo "::group::Helm Misconfiguration Results (${{ inputs.image_name }})"
+          cat trivy-helm-${{ inputs.image_name }}.txt
+          echo "::endgroup::"
+
+      - name: Prepare Helm PR comment
+        if: github.event_name == 'pull_request'
+        run: |
+          RESULTS_FILE="trivy-helm-${{ inputs.image_name }}.txt"
+          COMMENT_FILE="trivy-helm-comment-${{ inputs.image_name }}.md"
+          MAX_CHARS=60000
+
+          FILE_SIZE=$(wc -c < "$RESULTS_FILE")
+
+          {
+            echo "## Helm Chart Misconfiguration Scan (${{ inputs.image_name }})"
+            echo ""
+            echo "<details>"
+            echo "<summary>Click to expand results</summary>"
+            echo ""
+            echo '```'
+            if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
+              head -c "$MAX_CHARS" "$RESULTS_FILE"
+              echo ""
+              echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
+              echo "See full results in the 'Helm Misconfiguration Results' step above"
+            else
+              cat "$RESULTS_FILE"
+            fi
+            echo '```'
+            echo ""
+            echo "</details>"
+          } > "$COMMENT_FILE"
+
+      - name: Post Helm PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: trivy-helm-${{ inputs.image_name }}
+          path: trivy-helm-comment-${{ inputs.image_name }}.md
 
