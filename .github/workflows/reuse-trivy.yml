@@ -20,6 +20,11 @@ on:
         required: false
         default: "amd64"
         description: "Comma-separated platforms (e.g., 'amd64,arm64')"
+      arm_runner:
+        type: string
+        required: false
+        default: "Linux-ARM64"
+        description: "Runner to use for ARM builds (default: Linux-ARM64)"
     secrets:
       GH_ACCESS_TOKEN:
         required: false
@@ -53,7 +58,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
-    runs-on: ${{ matrix.platform == 'arm64' && 'Linux-ARM64' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.platform == 'arm64' && inputs.arm_runner || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
