@@ -111,18 +111,18 @@ jobs:
             trivy convert --format sarif --output "${PREFIX}.sarif" "${PREFIX}.json"
           fi
 
-      - name: Log full Trivy results
-        run: |
-          echo "::group::Full Trivy Scan Results (${{ inputs.image_name }} - ${{ matrix.platform }})"
-          cat trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt
-          echo "::endgroup::"
-
       - name: Upload SARIF to GitHub Security
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.sarif
           category: container-security-${{ inputs.image_name }}-${{ matrix.platform }}
+
+      - name: Log full Trivy results
+        run: |
+          echo "::group::Full Trivy Scan Results (${{ inputs.image_name }} - ${{ matrix.platform }})"
+          cat trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt
+          echo "::endgroup::"
 
       - name: Prepare PR comment
         if: github.event_name == 'pull_request'
