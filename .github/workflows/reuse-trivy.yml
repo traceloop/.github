@@ -207,14 +207,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache Trivy
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/trivy
-          key: trivy-helm-${{ runner.os }}
-          restore-keys: |
-            trivy-helm-
-
       - name: Set up Helm
         uses: azure/setup-helm@v4.3.1
         with:
@@ -257,8 +249,6 @@ jobs:
           format: json
           output: trivy-helm-${{ env.CHART_NAME }}.json
           severity: CRITICAL,HIGH,MEDIUM,LOW
-          scanners: misconfig
-          misconfig-scanners: kubernetes
 
       - name: Convert Helm results
         run: |
