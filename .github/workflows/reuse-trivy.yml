@@ -150,7 +150,12 @@ jobs:
       - name: Log full Trivy results
         run: |
           echo "::group::Full Trivy Scan Results (${{ inputs.image_name }} - ${{ matrix.platform }})"
-          cat trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt
+          RESULTS_FILE="trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt"
+          if [ -s "$RESULTS_FILE" ]; then
+            cat "$RESULTS_FILE"
+          else
+            echo "✅ No vulnerabilities found!"
+          fi
           echo "::endgroup::"
 
       - name: Prepare PR comment
@@ -166,21 +171,25 @@ jobs:
           {
             echo "## 🔒 Container Vulnerability Scan (${{ inputs.image_name }} - ${{ matrix.platform }})"
             echo ""
-            echo "<details>"
-            echo "<summary>Click to expand results</summary>"
-            echo ""
-            echo '```'
-            if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
-              head -c "$MAX_CHARS" "$RESULTS_FILE"
-              echo ""
-              echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
-              echo "See full results in the 'Full Trivy Scan Results' step above"
+            if [ ! -s "$RESULTS_FILE" ]; then
+              echo "✅ **No vulnerabilities found!**"
             else
-              cat "$RESULTS_FILE"
+              echo "<details>"
+              echo "<summary>Click to expand results</summary>"
+              echo ""
+              echo '```'
+              if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
+                head -c "$MAX_CHARS" "$RESULTS_FILE"
+                echo ""
+                echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
+                echo "See full results in the 'Full Trivy Scan Results' step above"
+              else
+                cat "$RESULTS_FILE"
+              fi
+              echo '```'
+              echo ""
+              echo "</details>"
             fi
-            echo '```'
-            echo ""
-            echo "</details>"
           } > "$COMMENT_FILE"
 
       - name: Post PR comment
@@ -270,33 +279,42 @@ jobs:
       - name: Log Helm scan results
         run: |
           echo "::group::Helm Misconfiguration Results (${CHART_NAME})"
-          cat "trivy-helm-${CHART_NAME}.txt"
+          if [ -s "trivy-helm-${CHART_NAME}.txt" ]; then
+            cat "trivy-helm-${CHART_NAME}.txt"
+          else
+            echo "✅ No misconfigurations found!"
+          fi
           echo "::endgroup::"
 
       - name: Prepare Helm PR comment
         if: github.event_name == 'pull_request'
         run: |
           MAX_CHARS=60000
-          FILE_SIZE=$(wc -c < "trivy-helm-${CHART_NAME}.txt")
+          RESULTS_FILE="trivy-helm-${CHART_NAME}.txt"
+          FILE_SIZE=$(wc -c < "$RESULTS_FILE")
 
           {
-            echo "## Helm Chart Misconfiguration Scan (${CHART_NAME})"
+            echo "## ⎈ Helm Chart Misconfiguration Scan (${CHART_NAME})"
             echo ""
-            echo "<details>"
-            echo "<summary>Click to expand results</summary>"
-            echo ""
-            echo '```'
-            if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
-              head -c "$MAX_CHARS" "trivy-helm-${CHART_NAME}.txt"
-              echo ""
-              echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
-              echo "See full results in the 'Helm Misconfiguration Results' step above"
+            if [ ! -s "$RESULTS_FILE" ]; then
+              echo "✅ **No misconfigurations found!**"
             else
-              cat "trivy-helm-${CHART_NAME}.txt"
+              echo "<details>"
+              echo "<summary>Click to expand results</summary>"
+              echo ""
+              echo '```'
+              if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
+                head -c "$MAX_CHARS" "$RESULTS_FILE"
+                echo ""
+                echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
+                echo "See full results in the 'Helm Misconfiguration Results' step above"
+              else
+                cat "$RESULTS_FILE"
+              fi
+              echo '```'
+              echo ""
+              echo "</details>"
             fi
-            echo '```'
-            echo ""
-            echo "</details>"
           } > "trivy-helm-comment-${CHART_NAME}.md"
 
       - name: Post Helm PR comment
