@@ -99,7 +99,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-results-${{ matrix.platform }}.sarif
-          category: container-security-${{ matrix.platform }}
+          category: container-security-${{ inputs.image_name }}-${{ matrix.platform }}
 
       - name: Trivy scan for PR comment
         if: github.event_name == 'pull_request'
@@ -115,7 +115,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           {
-            echo "## 🔒 Container Vulnerability Scan (${{ matrix.platform }})"
+            echo "## 🔒 Container Vulnerability Scan (${{ inputs.image_name }} - ${{ matrix.platform }})"
             echo ""
             echo "<details>"
             echo "<summary>Click to expand results</summary>"
@@ -131,6 +131,6 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: trivy-scan-${{ matrix.platform }}
+          header: trivy-scan-${{ inputs.image_name }}-${{ matrix.platform }}
           path: trivy-comment-${{ matrix.platform }}.md
 
