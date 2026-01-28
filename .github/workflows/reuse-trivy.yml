@@ -42,6 +42,11 @@ on:
         required: false
         default: "helm/"
         description: "Path to Helm chart directory (e.g., 'helm/' or 'charts/myapp')"
+      helm_chart_name:
+        type: string
+        required: false
+        default: "helm"
+        description: "Chart name for output/categories"
     secrets:
       GH_ACCESS_TOKEN:
         required: false
@@ -194,74 +199,78 @@ jobs:
           restore-keys: |
             trivy-helm-
 
-      - name: Trivy Helm scan (JSON)
+      - name: Set up Helm
+        uses: azure/setup-helm@v4.3.1
+
+      - name: Render Helm chart
+        env:
+          CHART_PATH: ${{ inputs.helm_chart_path }}
+        run: |
+          set -euo pipefail
+          helm dependency build "$CHART_PATH" || true
+          helm template trivy-scan "$CHART_PATH" > rendered.yaml
+
+      - name: Trivy config scan rendered manifests (JSON)
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: config
-          scan-ref: ${{ inputs.helm_chart_path }}
+          scan-ref: rendered.yaml
           format: json
-          output: trivy-helm-${{ inputs.image_name }}.json
+          output: trivy-helm.json
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
       - name: Convert Helm results
         run: |
           set -euo pipefail
-          PREFIX="trivy-helm-${{ inputs.image_name }}"
+          trivy convert --format table --output trivy-helm.txt trivy-helm.json
 
-          # Convert -> table (for logs + PR comment)
-          trivy convert --format table --output "${PREFIX}.txt" "${PREFIX}.json"
-
-          # Convert -> SARIF only on main branch
           if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            trivy convert --format sarif --output "${PREFIX}.sarif" "${PREFIX}.json"
+            trivy convert --format sarif --output trivy-helm.sarif trivy-helm.json
           fi
 
       - name: Upload Helm SARIF to GitHub Security
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-helm-${{ inputs.image_name }}.sarif
-          category: helm-misconfig-${{ inputs.image_name }}
+          sarif_file: trivy-helm.sarif
+          category: helm-misconfig-${{ inputs.helm_chart_name }}
 
       - name: Log Helm scan results
         run: |
-          echo "::group::Helm Misconfiguration Results (${{ inputs.image_name }})"
-          cat trivy-helm-${{ inputs.image_name }}.txt
+          echo "::group::Helm Misconfiguration Results (${{ inputs.helm_chart_name }})"
+          cat trivy-helm.txt
           echo "::endgroup::"
 
       - name: Prepare Helm PR comment
         if: github.event_name == 'pull_request'
         run: |
-          RESULTS_FILE="trivy-helm-${{ inputs.image_name }}.txt"
-          COMMENT_FILE="trivy-helm-comment-${{ inputs.image_name }}.md"
           MAX_CHARS=60000
-
-          FILE_SIZE=$(wc -c < "$RESULTS_FILE")
+          FILE_SIZE=$(wc -c < trivy-helm.txt)
 
           {
-            echo "## Helm Chart Misconfiguration Scan (${{ inputs.image_name }})"
+            echo "## Helm Chart Misconfiguration Scan (${{ inputs.helm_chart_name }})"
             echo ""
             echo "<details>"
             echo "<summary>Click to expand results</summary>"
             echo ""
             echo '```'
             if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
-              head -c "$MAX_CHARS" "$RESULTS_FILE"
+              head -c "$MAX_CHARS" trivy-helm.txt
               echo ""
               echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
               echo "See full results in the 'Helm Misconfiguration Results' step above"
             else
-              cat "$RESULTS_FILE"
+              cat trivy-helm.txt
             fi
             echo '```'
             echo ""
             echo "</details>"
-          } > "$COMMENT_FILE"
+          } > trivy-helm-comment.md
 
       - name: Post Helm PR comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: trivy-helm-${{ inputs.image_name }}
-          path: trivy-helm-comment-${{ inputs.image_name }}.md
+          header: trivy-helm-${{ inputs.helm_chart_name }}
+          path: trivy-helm-comment.md
 
