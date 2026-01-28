@@ -233,8 +233,10 @@ jobs:
             exit 1
           fi
           
-          # Build dependencies (downloads .tgz files if needed)
-          helm dependency build "$CHART_PATH" || true
+          # Build dependencies if chart has any
+          if grep -q "^dependencies:" "$CHART_PATH/Chart.yaml" 2>/dev/null; then
+            helm dependency build "$CHART_PATH"
+          fi
           
           # Build template command with optional values files
           TEMPLATE_ARGS=()
