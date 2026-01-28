@@ -47,6 +47,11 @@ on:
         required: false
         default: "helm"
         description: "Chart name for output/categories"
+      helm_values_files:
+        type: string
+        required: false
+        default: ""
+        description: "Comma-separated paths to values files (e.g., 'helm/values.yaml,overlays/values-prod.yaml')"
     secrets:
       GH_ACCESS_TOKEN:
         required: false
@@ -188,6 +193,8 @@ jobs:
   helm-scan:
     if: inputs.scan_helm_chart
     runs-on: ubuntu-latest
+    env:
+      CHART_NAME: ${{ inputs.helm_chart_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -201,76 +208,101 @@ jobs:
 
       - name: Set up Helm
         uses: azure/setup-helm@v4.3.1
+        with:
+          version: 'v3.15.4'
 
       - name: Render Helm chart
         env:
           CHART_PATH: ${{ inputs.helm_chart_path }}
+          VALUES_FILES: ${{ inputs.helm_values_files }}
         run: |
           set -euo pipefail
-          helm dependency build "$CHART_PATH" || true
-          helm template trivy-scan "$CHART_PATH" > rendered.yaml
+          
+          # Validate chart exists
+          if [ ! -f "$CHART_PATH/Chart.yaml" ]; then
+            echo "Chart.yaml not found under $CHART_PATH" >&2
+            exit 1
+          fi
+          
+          # Build dependencies if Chart.lock exists
+          if [ -f "$CHART_PATH/Chart.lock" ]; then
+            helm dependency build "$CHART_PATH"
+          fi
+          
+          # Build template command with optional values files
+          TEMPLATE_ARGS=()
+          if [ -n "$VALUES_FILES" ]; then
+            IFS=',' read -ra FILES <<< "$VALUES_FILES"
+            for f in "${FILES[@]}"; do
+              TEMPLATE_ARGS+=(-f "$f")
+            done
+          fi
+          
+          helm template trivy-scan "$CHART_PATH" "${TEMPLATE_ARGS[@]}" > "rendered-${CHART_NAME}.yaml"
 
       - name: Trivy config scan rendered manifests (JSON)
         uses: aquasecurity/trivy-action@0.33.1
         with:
           scan-type: config
-          scan-ref: rendered.yaml
+          scan-ref: rendered-${{ env.CHART_NAME }}.yaml
           format: json
-          output: trivy-helm.json
+          output: trivy-helm-${{ env.CHART_NAME }}.json
           severity: CRITICAL,HIGH,MEDIUM,LOW
+          scanners: misconfig
+          misconfig-scanners: kubernetes
 
       - name: Convert Helm results
         run: |
           set -euo pipefail
-          trivy convert --format table --output trivy-helm.txt trivy-helm.json
+          trivy convert --format table --output "trivy-helm-${CHART_NAME}.txt" "trivy-helm-${CHART_NAME}.json"
 
           if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            trivy convert --format sarif --output trivy-helm.sarif trivy-helm.json
+            trivy convert --format sarif --output "trivy-helm-${CHART_NAME}.sarif" "trivy-helm-${CHART_NAME}.json"
           fi
 
       - name: Upload Helm SARIF to GitHub Security
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-helm.sarif
-          category: helm-misconfig-${{ inputs.helm_chart_name }}
+          sarif_file: trivy-helm-${{ env.CHART_NAME }}.sarif
+          category: helm-misconfig-${{ github.repository }}-${{ env.CHART_NAME }}
 
       - name: Log Helm scan results
         run: |
-          echo "::group::Helm Misconfiguration Results (${{ inputs.helm_chart_name }})"
-          cat trivy-helm.txt
+          echo "::group::Helm Misconfiguration Results (${CHART_NAME})"
+          cat "trivy-helm-${CHART_NAME}.txt"
           echo "::endgroup::"
 
       - name: Prepare Helm PR comment
         if: github.event_name == 'pull_request'
         run: |
           MAX_CHARS=60000
-          FILE_SIZE=$(wc -c < trivy-helm.txt)
+          FILE_SIZE=$(wc -c < "trivy-helm-${CHART_NAME}.txt")
 
           {
-            echo "## Helm Chart Misconfiguration Scan (${{ inputs.helm_chart_name }})"
+            echo "## Helm Chart Misconfiguration Scan (${CHART_NAME})"
             echo ""
             echo "<details>"
             echo "<summary>Click to expand results</summary>"
             echo ""
             echo '```'
             if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
-              head -c "$MAX_CHARS" trivy-helm.txt
+              head -c "$MAX_CHARS" "trivy-helm-${CHART_NAME}.txt"
               echo ""
               echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
               echo "See full results in the 'Helm Misconfiguration Results' step above"
             else
-              cat trivy-helm.txt
+              cat "trivy-helm-${CHART_NAME}.txt"
             fi
             echo '```'
             echo ""
             echo "</details>"
-          } > trivy-helm-comment.md
+          } > "trivy-helm-comment-${CHART_NAME}.md"
 
       - name: Post Helm PR comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          header: trivy-helm-${{ inputs.helm_chart_name }}
-          path: trivy-helm-comment.md
+          header: trivy-helm-${{ env.CHART_NAME }}
+          path: trivy-helm-comment-${{ env.CHART_NAME }}.md
 
