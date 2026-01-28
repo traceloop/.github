@@ -89,34 +89,26 @@ jobs:
             "${secrets[@]}" \
             "${{ inputs.docker_context }}"
 
-      - name: Install Trivy
-        uses: aquasecurity/setup-trivy@v0
+      - name: Trivy scan (JSON)
+        uses: aquasecurity/trivy-action@0.33.1
         with:
-          version: v0.68.2
+          image-ref: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
+          format: json
+          output: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.json
+          vuln-type: os,library
+          severity: CRITICAL,HIGH,MEDIUM,LOW
 
-      - name: Trivy scan (JSON) and convert
-        env:
-          TRIVY_CACHE_DIR: ~/.cache/trivy
+      - name: Convert Trivy results
         run: |
           set -euo pipefail
-
-          IMAGE="${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}"
           PREFIX="trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}"
-          JSON="${PREFIX}.json"
-          TXT="${PREFIX}.txt"
-          SARIF="${PREFIX}.sarif"
 
-          SCAN_ARGS="--vuln-type os,library --severity CRITICAL,HIGH,MEDIUM,LOW --cache-dir ${TRIVY_CACHE_DIR}"
-
-          # Scan once -> JSON
-          trivy image $SCAN_ARGS --format json --output "$JSON" "$IMAGE"
-
-          # Always convert -> table (for logs + PR comment)
-          trivy convert --format table --output "$TXT" "$JSON"
+          # Convert -> table (for logs + PR comment)
+          trivy convert --format table --output "${PREFIX}.txt" "${PREFIX}.json"
 
           # Convert -> SARIF only on main branch
           if [[ "${{ github.event_name }}" != "pull_request" && "${{ github.ref }}" == "refs/heads/main" ]]; then
-            trivy convert --format sarif --output "$SARIF" "$JSON"
+            trivy convert --format sarif --output "${PREFIX}.sarif" "${PREFIX}.json"
           fi
 
       - name: Log full Trivy results
