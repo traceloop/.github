@@ -111,9 +111,23 @@ jobs:
           vuln-type: os,library
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
+      - name: Log full Trivy results
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "::group::Full Trivy Scan Results (${{ matrix.platform }})"
+          cat trivy-results-${{ matrix.platform }}.txt
+          echo "::endgroup::"
+
       - name: Prepare PR comment
         if: github.event_name == 'pull_request'
         run: |
+          RESULTS_FILE="trivy-results-${{ matrix.platform }}.txt"
+          COMMENT_FILE="trivy-comment-${{ matrix.platform }}.md"
+          MAX_CHARS=60000
+
+          # Get file size
+          FILE_SIZE=$(wc -c < "$RESULTS_FILE")
+
           {
             echo "## 🔒 Container Vulnerability Scan (${{ matrix.platform }})"
             echo ""
@@ -121,11 +135,18 @@ jobs:
             echo "<summary>Click to expand results</summary>"
             echo ""
             echo '```'
-            cat trivy-results-${{ matrix.platform }}.txt
+            if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
+              head -c "$MAX_CHARS" "$RESULTS_FILE"
+              echo ""
+              echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
+              echo "See full results in the 'Full Trivy Scan Results' step above"
+            else
+              cat "$RESULTS_FILE"
+            fi
             echo '```'
             echo ""
             echo "</details>"
-          } > trivy-comment-${{ matrix.platform }}.md
+          } > "$COMMENT_FILE"
 
       - name: Post PR comment
         if: github.event_name == 'pull_request'
