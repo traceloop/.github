@@ -1,0 +1,59 @@
+name: cron-trivy
+
+on:
+  workflow_call:
+    inputs:
+      image_ref:
+        type: string
+        required: true
+        description: "Full image reference to scan (e.g., 'traceloop/slm-pipeline:latest')"
+      scanners:
+        type: string
+        required: false
+        default: "vuln,secret,license"
+        description: "Comma-separated scanners to run"
+      severity:
+        type: string
+        required: false
+        default: "CRITICAL,HIGH,MEDIUM,LOW"
+        description: "Severity levels to report"
+      sarif_category:
+        type: string
+        required: false
+        default: "production-container-scan"
+        description: "Category for SARIF upload"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  scan-production:
+    name: Scan Production Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull image
+        run: docker pull ${{ inputs.image_ref }}
+
+      - name: Trivy scan (table output)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ inputs.image_ref }}
+          scanners: ${{ inputs.scanners }}
+          severity: ${{ inputs.severity }}
+          format: table
+
+      - name: Trivy scan (SARIF)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          image-ref: ${{ inputs.image_ref }}
+          scanners: ${{ inputs.scanners }}
+          severity: ${{ inputs.severity }}
+          format: sarif
+          output: trivy-production.sarif
+
+      - name: Upload to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-production.sarif
+          category: ${{ inputs.sarif_category }}

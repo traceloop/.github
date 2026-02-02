@@ -1,0 +1,129 @@
+name: ci-helm-trivy
+
+on:
+  workflow_call:
+    inputs:
+      chart_path:
+        type: string
+        required: true
+        description: "Path to helm chart directory (e.g., 'helm/')"
+      chart_name:
+        type: string
+        required: false
+        default: ""
+        description: "Display name for comments (defaults to chart_path)"
+      scanners:
+        type: string
+        required: false
+        default: "misconfig,secret"
+        description: "Trivy scanners to run"
+      severity:
+        type: string
+        required: false
+        default: "CRITICAL,HIGH,MEDIUM,LOW"
+        description: "Severity levels to report"
+      exit_code:
+        type: number
+        required: false
+        default: 0
+        description: "Exit code when issues found (0 to not fail)"
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  scan:
+    name: Helm Trivy Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Trivy
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/trivy
+          key: trivy-${{ runner.os }}
+          restore-keys: trivy-
+
+      - name: Trivy scan (JSON)
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: config
+          scan-ref: ${{ inputs.chart_path }}
+          scanners: ${{ inputs.scanners }}
+          exit-code: 0
+          severity: ${{ inputs.severity }}
+          format: json
+          output: trivy-helm-results.json
+
+      - name: Convert to table
+        run: |
+          trivy convert --format table --output trivy-helm-results.txt trivy-helm-results.json
+
+      - name: Convert to SARIF
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          trivy convert --format sarif --output trivy-helm-results.sarif trivy-helm-results.json
+
+      - name: Upload SARIF to GitHub Security
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-helm-results.sarif
+          category: helm-security-${{ inputs.chart_name || inputs.chart_path }}
+
+      - name: Log results
+        run: |
+          echo "::group::Helm Trivy Scan Results (${{ inputs.chart_name || inputs.chart_path }})"
+          if [ -s trivy-helm-results.txt ]; then
+            cat trivy-helm-results.txt
+          else
+            echo "✅ No issues found!"
+          fi
+          echo "::endgroup::"
+
+      - name: Prepare PR comment
+        if: github.event_name == 'pull_request'
+        run: |
+          MAX_CHARS=60000
+          FILE_SIZE=$(wc -c < trivy-helm-results.txt || echo "0")
+          DISPLAY_NAME="${{ inputs.chart_name || inputs.chart_path }}"
+
+          {
+            echo "## 🔒 Helm Security Scan (${DISPLAY_NAME})"
+            echo ""
+            if [ ! -s trivy-helm-results.txt ]; then
+              echo "✅ **No misconfigurations or secrets found!**"
+            else
+              echo "<details>"
+              echo "<summary>Click to expand results</summary>"
+              echo ""
+              echo '```'
+              if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
+                head -c "$MAX_CHARS" trivy-helm-results.txt
+                echo ""
+                echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
+                echo "See full results in workflow logs"
+              else
+                cat trivy-helm-results.txt
+              fi
+              echo '```'
+              echo ""
+              echo "</details>"
+            fi
+          } > trivy-helm-comment.md
+
+      - name: Post PR comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: trivy-helm-scan-${{ inputs.chart_name || inputs.chart_path }}
+          path: trivy-helm-comment.md
+
+      - name: Check for failures
+        if: inputs.exit_code != 0
+        run: |
+          trivy convert --format table --exit-code ${{ inputs.exit_code }} --severity ${{ inputs.severity }} trivy-helm-results.json
