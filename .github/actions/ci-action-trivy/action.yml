@@ -36,6 +36,13 @@ runs:
         key: trivy-${{ runner.os }}
         restore-keys: trivy-
 
+    - name: Generate safe file suffix
+      id: suffix
+      shell: bash
+      run: |
+        SUFFIX=$(echo "${{ inputs.image_ref || inputs.image_name }}" | tr '/:@' '-')
+        echo "value=${SUFFIX}" >> "$GITHUB_OUTPUT"
+
     - name: Trivy scan (JSON)
       uses: aquasecurity/trivy-action@0.33.1
       with:
@@ -44,33 +51,34 @@ runs:
         exit-code: 0
         severity: ${{ inputs.severity }}
         format: json
-        output: trivy-results.json
+        output: trivy-results-${{ steps.suffix.outputs.value }}.json
 
     - name: Convert to table
       shell: bash
       run: |
-        trivy convert --format table --output trivy-results.txt trivy-results.json
+        trivy convert --format table --output trivy-results-${{ steps.suffix.outputs.value }}.txt trivy-results-${{ steps.suffix.outputs.value }}.json
 
     - name: Convert to SARIF
       if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
       shell: bash
       run: |
-        trivy convert --format sarif --output trivy-results.sarif trivy-results.json
+        trivy convert --format sarif --output trivy-results-${{ steps.suffix.outputs.value }}.sarif trivy-results-${{ steps.suffix.outputs.value }}.json
 
     - name: Upload SARIF to GitHub Security
       if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
       uses: github/codeql-action/upload-sarif@v4
       with:
-        sarif_file: trivy-results.sarif
+        sarif_file: trivy-results-${{ steps.suffix.outputs.value }}.sarif
         category: container-security-${{ inputs.image_name || inputs.image_ref }}
 
     - name: Log results
       shell: bash
       run: |
         DISPLAY_NAME="${{ inputs.image_name || inputs.image_ref }}"
+        RESULTS_FILE="trivy-results-${{ steps.suffix.outputs.value }}.txt"
         echo "::group::Trivy Scan Results (${DISPLAY_NAME})"
-        if [ -s trivy-results.txt ]; then
-          cat trivy-results.txt
+        if [ -s "$RESULTS_FILE" ]; then
+          cat "$RESULTS_FILE"
         else
           echo "No issues found!"
         fi
@@ -81,13 +89,15 @@ runs:
       shell: bash
       run: |
         MAX_CHARS=60000
-        FILE_SIZE=$(wc -c < trivy-results.txt || echo "0")
+        RESULTS_FILE="trivy-results-${{ steps.suffix.outputs.value }}.txt"
+        COMMENT_FILE="trivy-comment-${{ steps.suffix.outputs.value }}.md"
+        FILE_SIZE=$(wc -c < "$RESULTS_FILE" || echo "0")
         DISPLAY_NAME="${{ inputs.image_name || inputs.image_ref }}"
 
         {
           echo "## Container Security Scan (${DISPLAY_NAME})"
           echo ""
-          if [ ! -s trivy-results.txt ]; then
+          if [ ! -s "$RESULTS_FILE" ]; then
             echo "**No vulnerabilities found!**"
           else
             echo "<details>"
@@ -95,29 +105,29 @@ runs:
             echo ""
             echo '```'
             if [ "$FILE_SIZE" -gt "$MAX_CHARS" ]; then
-              head -c "$MAX_CHARS" trivy-results.txt
+              head -c "$MAX_CHARS" "$RESULTS_FILE"
               echo ""
               echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
               echo "See full results in workflow logs"
             else
-              cat trivy-results.txt
+              cat "$RESULTS_FILE"
             fi
             echo '```'
             echo ""
             echo "</details>"
           fi
-        } > trivy-comment.md
+        } > "$COMMENT_FILE"
 
     - name: Post PR comment
       if: github.event_name == 'pull_request'
       uses: marocchino/sticky-pull-request-comment@v2
       with:
         header: trivy-scan-${{ inputs.image_name || inputs.image_ref }}
-        path: trivy-comment.md
+        path: trivy-comment-${{ steps.suffix.outputs.value }}.md
         GITHUB_TOKEN: ${{ inputs.github_token }}
 
     - name: Check for failures
       if: inputs.exit_code != '0'
       shell: bash
       run: |
-        trivy convert --format table --exit-code ${{ inputs.exit_code }} --severity ${{ inputs.severity }} trivy-results.json
+        trivy convert --format table --exit-code ${{ inputs.exit_code }} --severity ${{ inputs.severity }} trivy-results-${{ steps.suffix.outputs.value }}.json
