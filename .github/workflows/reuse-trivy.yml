@@ -35,7 +35,7 @@ on:
       scan_helm_chart:
         type: boolean
         required: false
-        default: false
+        default: true
         description: "Scan Helm chart for misconfigurations"
       helm_chart_path:
         type: string
@@ -52,6 +52,17 @@ on:
         required: false
         default: ""
         description: "Comma-separated paths to values files (e.g., 'helm/values.yaml,overlays/values-prod.yaml')"
+      # Additional scanners (applied to image scan)
+      scan_secrets:
+        type: boolean
+        required: false
+        default: true
+        description: "Include secret scanning in image scan"
+      scan_licenses:
+        type: boolean
+        required: false
+        default: true
+        description: "Include license scanning in image scan"
     secrets:
       GH_ACCESS_TOKEN:
         required: false
@@ -110,7 +121,7 @@ jobs:
           secrets=()
           [ -n "${GH_ACCESS_TOKEN}" ] && secrets+=(--secret id=gh_token,env=GH_ACCESS_TOKEN)
           [ -n "${DOPPLER_TOKEN}" ] && secrets+=(--secret id=doppler_token,env=DOPPLER_TOKEN)
-          
+
           docker buildx build \
             --load \
             -t "${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}" \
@@ -118,13 +129,26 @@ jobs:
             "${secrets[@]}" \
             "${{ inputs.docker_context }}"
 
+      - name: Build scanners list
+        id: scanners
+        run: |
+          SCANNERS="vuln"
+          if [[ "${{ inputs.scan_secrets }}" == "true" ]]; then
+            SCANNERS="${SCANNERS},secret"
+          fi
+          if [[ "${{ inputs.scan_licenses }}" == "true" ]]; then
+            SCANNERS="${SCANNERS},license"
+          fi
+          echo "list=${SCANNERS}" >> $GITHUB_OUTPUT
+          echo "Enabled scanners: ${SCANNERS}"
+
       - name: Trivy scan (JSON)
         uses: aquasecurity/trivy-action@0.33.1
         with:
           image-ref: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
           format: json
           output: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.json
-          vuln-type: os,library
+          scanners: ${{ steps.scanners.outputs.list }}
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
       - name: Convert Trivy results
@@ -149,12 +173,12 @@ jobs:
 
       - name: Log full Trivy results
         run: |
-          echo "::group::Full Trivy Scan Results (${{ inputs.image_name }} - ${{ matrix.platform }})"
+          echo "::group::Trivy Scan Results (${{ inputs.image_name }} - ${{ matrix.platform }}) [scanners: ${{ steps.scanners.outputs.list }}]"
           RESULTS_FILE="trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.txt"
           if [ -s "$RESULTS_FILE" ]; then
             cat "$RESULTS_FILE"
           else
-            echo "✅ No vulnerabilities found!"
+            echo "✅ No issues found!"
           fi
           echo "::endgroup::"
 
@@ -169,10 +193,10 @@ jobs:
           FILE_SIZE=$(wc -c < "$RESULTS_FILE")
 
           {
-            echo "## 🔒 Container Vulnerability Scan (${{ inputs.image_name }} - ${{ matrix.platform }})"
+            echo "## 🔒 Container Security Scan (${{ inputs.image_name }} - ${{ matrix.platform }})"
             echo ""
             if [ ! -s "$RESULTS_FILE" ]; then
-              echo "✅ **No vulnerabilities found!**"
+              echo "✅ **No issues found!**"
             else
               echo "<details>"
               echo "<summary>Click to expand results</summary>"
@@ -182,7 +206,7 @@ jobs:
                 head -c "$MAX_CHARS" "$RESULTS_FILE"
                 echo ""
                 echo "... (output truncated - exceeded ${MAX_CHARS} characters)"
-                echo "See full results in the 'Full Trivy Scan Results' step above"
+                echo "See full results in the 'Trivy Scan Results' step above"
               else
                 cat "$RESULTS_FILE"
               fi
@@ -313,4 +337,3 @@ jobs:
         with:
           header: trivy-helm-${{ env.CHART_NAME }}
           path: trivy-helm-comment-${{ env.CHART_NAME }}.md
-
