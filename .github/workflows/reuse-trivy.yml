@@ -124,6 +124,7 @@ jobs:
           image-ref: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
           format: json
           output: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.json
+          scanners: vuln,secret,license
           vuln-type: os,library
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
@@ -248,6 +249,7 @@ jobs:
           scan-ref: rendered-${{ env.CHART_NAME }}.yaml
           format: json
           output: trivy-helm-${{ env.CHART_NAME }}.json
+          scanners: misconfig,secret,license
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
       - name: Convert Helm results
