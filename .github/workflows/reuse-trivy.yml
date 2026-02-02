@@ -102,21 +102,31 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image
+      # Mirror release workflow: create secret files in build context
+      # This ensures CI catches any secrets that would leak via COPY commands
+      - name: Create secret files (mirror release workflow)
         env:
           GH_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          secrets=()
-          [ -n "${GH_ACCESS_TOKEN}" ] && secrets+=(--secret id=gh_token,env=GH_ACCESS_TOKEN)
-          [ -n "${DOPPLER_TOKEN}" ] && secrets+=(--secret id=doppler_token,env=DOPPLER_TOKEN)
-          
-          docker buildx build \
-            --load \
-            -t "${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}" \
-            -f "${{ inputs.docker_context }}/${{ inputs.dockerfile }}" \
-            "${secrets[@]}" \
-            "${{ inputs.docker_context }}"
+          [ -n "${GH_ACCESS_TOKEN}" ] && echo "${GH_ACCESS_TOKEN}" > gh_token.txt
+          [ -n "${DOPPLER_TOKEN}" ] && echo "${DOPPLER_TOKEN}" > doppler_token.txt
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ inputs.docker_context }}
+          file: ${{ inputs.docker_context }}/${{ inputs.dockerfile }}
+          load: true
+          push: false
+          tags: ${{ inputs.image_name }}:${{ github.sha }}-${{ matrix.platform }}
+          secret-files: |
+            gh_token=gh_token.txt
+            doppler_token=doppler_token.txt
+
+      - name: Cleanup secret files
+        if: always()
+        run: rm -f gh_token.txt doppler_token.txt
 
       - name: Trivy scan (JSON)
         uses: aquasecurity/trivy-action@0.33.1
@@ -219,18 +229,18 @@ jobs:
           VALUES_FILES: ${{ inputs.helm_values_files }}
         run: |
           set -euo pipefail
-          
+
           # Validate chart exists
           if [ ! -f "$CHART_PATH/Chart.yaml" ]; then
             echo "Chart.yaml not found under $CHART_PATH" >&2
             exit 1
           fi
-          
+
           # Build dependencies if chart has any
           if grep -q "^dependencies:" "$CHART_PATH/Chart.yaml" 2>/dev/null; then
             helm dependency build "$CHART_PATH"
           fi
-          
+
           # Build template command with optional values files
           TEMPLATE_ARGS=()
           if [ -n "$VALUES_FILES" ]; then
@@ -239,7 +249,7 @@ jobs:
               TEMPLATE_ARGS+=(-f "$f")
             done
           fi
-          
+
           helm template trivy-scan "$CHART_PATH" "${TEMPLATE_ARGS[@]}" > "rendered-${CHART_NAME}.yaml"
 
       - name: Trivy config scan rendered manifests (JSON)
@@ -315,4 +325,3 @@ jobs:
         with:
           header: trivy-helm-${{ env.CHART_NAME }}
           path: trivy-helm-comment-${{ env.CHART_NAME }}.md
-
