@@ -149,6 +149,7 @@ jobs:
           format: json
           output: trivy-results-${{ inputs.image_name }}-${{ matrix.platform }}.json
           scanners: ${{ steps.scanners.outputs.list }}
+          vuln-type: os,library
           severity: CRITICAL,HIGH,MEDIUM,LOW
 
       - name: Convert Trivy results
