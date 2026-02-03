@@ -31,6 +31,7 @@ on:
         description: "Docker Hub access token"
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
