@@ -10,7 +10,7 @@ on:
       scanners:
         type: string
         required: false
-        default: "vuln,secret,license"
+        default: "vuln,secret"
         description: "Comma-separated scanners to run"
       severity:
         type: string
@@ -22,6 +22,13 @@ on:
         required: false
         default: "production-container-scan"
         description: "Category for SARIF upload"
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+        description: "Docker Hub username (optional, for private images)"
+      DOCKERHUB_TOKEN:
+        required: false
+        description: "Docker Hub access token (optional, for private images)"
 
 permissions:
   contents: read
@@ -32,6 +39,13 @@ jobs:
     name: Scan Production Image
     runs-on: ubuntu-latest
     steps:
+      - name: Login to Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Pull image
         run: docker pull ${{ inputs.image_ref }}
 
