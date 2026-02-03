@@ -21,10 +21,6 @@ inputs:
     description: "Exit code when issues found (0 to not fail)"
     required: false
     default: "0"
-  github_token:
-    description: "GitHub token for PR comments"
-    required: false
-    default: ${{ github.token }}
 
 runs:
   using: "composite"
@@ -124,7 +120,6 @@ runs:
       with:
         header: trivy-scan-${{ inputs.image_name || inputs.image_ref }}
         path: trivy-comment-${{ steps.suffix.outputs.value }}.md
-        GITHUB_TOKEN: ${{ inputs.github_token }}
 
     - name: Check for failures
       if: inputs.exit_code != '0'
