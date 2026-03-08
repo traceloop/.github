@@ -50,7 +50,7 @@ jobs:
         run: docker pull ${{ inputs.image_ref }}
 
       - name: Trivy scan (table output)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.35
         with:
           image-ref: ${{ inputs.image_ref }}
           scanners: ${{ inputs.scanners }}
@@ -58,7 +58,7 @@ jobs:
           format: table
 
       - name: Trivy scan (SARIF)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@0.35
         with:
           image-ref: ${{ inputs.image_ref }}
           scanners: ${{ inputs.scanners }}
