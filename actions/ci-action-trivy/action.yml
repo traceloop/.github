@@ -40,7 +40,7 @@ runs:
         echo "value=${SUFFIX}" >> "$GITHUB_OUTPUT"
 
     - name: Trivy scan (JSON)
-      uses: aquasecurity/trivy-action@0.35.0
+      uses: aquasecurity/trivy-action@v0.35.0
       with:
         image-ref: ${{ inputs.image_ref }}
         scanners: ${{ inputs.scanners }}
